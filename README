@@ -4,7 +4,18 @@ This project is part of the course 'Advanced Topics in Machine Learning' at the 
 Its objective is to investigate the suitability of different classifiers with regards to an activity recognition dataset:
 http://archive.ics.uci.edu/ml/datasets/Heterogeneity+Activity+Recognition
 
+Our approach utilizes Sliding Window: Since the data is recorded sequentially over time, this
+information has to somehow be extracted and used by the classifier of choice. To achieve that
+we group a given number of training instances together and use mean as well as standard deviation
+with respect to the coordinates of the sensor. The class label for these new instances is decided
+by majority vote.
+
+
+
 Team members:
-	Hardik 
+	Hardik Balar
 	Noravee Sungpuag
 	Florian Bethe
+
+Supervisor:
+	Marcus Thiel
