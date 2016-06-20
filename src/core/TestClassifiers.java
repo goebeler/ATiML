@@ -1,5 +1,6 @@
 package core;
 
+import weka.core.Attribute;
 import weka.core.Instances;
 import weka.core.converters.CSVLoader;
 import weka.filters.Filter;
@@ -56,6 +57,7 @@ public class TestClassifiers {
 			// + 1 since WEKA indices start at 1 when given as string
 			rem.setAttributeIndex(Integer.toString(data.attribute("gt").index() + 1));
 			rem.setNominalIndicesArr(new int[]{data.attribute("gt").indexOfValue("null")});
+			rem.setModifyHeader(true);
 			rem.setInputFormat(data);
 			data = Filter.useFilter(data, rem);
 			
@@ -81,21 +83,45 @@ public class TestClassifiers {
 			
 			// Set up the correct evaluator
 			Evaluator eval = null;
+			String clsNames = "";
 			if(online) {
 				eval = new OnlineEvaluation(testData);
 				for(UpdateableClassifier classifier : TestClassifiers.parseUpdateableClassifiersFromCommandline(classifierParams)) {
 					((OnlineEvaluation)eval).addClassifier(classifier);
+					clsNames += classifier.getClass().getSimpleName() + " ";
 				}
 			} else {
 				eval = new OfflineEvaluation(testData);
 				for(Classifier classifier : TestClassifiers.parseClassifiersFromCommandline(classifierParams)) {
 					((OfflineEvaluation)eval).addClassifier(classifier);
+					clsNames += classifier.getClass().getSimpleName() + " ";
 				}
 			}
 			
-			int index = 0;
-			for(Evaluation e : eval.evaluateCumulated(trainingData)) {
-				Log.log(eval.getClassifierName(index++) + ":\n" + e.toSummaryString() + "\n" + e.confusionMatrix());
+			Log.log("Selected classifiers: " + clsNames + "...");
+			
+			if(parameters.contains("-steps")) {
+				int stepSize = Integer.parseInt(parameters.split("-steps ")[1].split(" ")[0]);
+				
+				Log.log("Evaluation step size: " + stepSize + "...");
+				
+				int currentStep = stepSize;
+				
+				for(List<Evaluation> evals : eval.evaluate(trainingData, stepSize)) {
+					Log.log("Current training set size: " + currentStep + "\n------------------------\n");
+					int index = 0;
+					for(Evaluation e : evals) {
+						Log.log(eval.getClassifierName(index++) + ":\n" + e.toSummaryString() + "\n"
+									+ printConfusionMatrix(trainingData.classAttribute(), e.confusionMatrix()) + "\n");
+					}
+					currentStep += stepSize;
+				}
+			} else {
+				int index = 0;
+				for(Evaluation e : eval.evaluateCumulated(trainingData)) {
+					Log.log(eval.getClassifierName(index++) + ":\n" + e.toSummaryString() + "\n"
+								+ printConfusionMatrix(trainingData.classAttribute(), e.confusionMatrix()));
+				}
 			}
 			
 			Log.saveProtocol("protocols/Log" + System.currentTimeMillis() + ".txt");
@@ -103,6 +129,59 @@ public class TestClassifiers {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+	
+	/**
+	 * Prints the given confusion matrix with respect to the class attribute to a string.
+	 * Each value holding cell is three tabs wide.
+	 * @param classAttr Class attribute for the confusion matrix
+	 * @param matrix Confusion matrix to be printed
+	 * @return String showing the confusion matrix
+	 */
+	private static String printConfusionMatrix(Attribute classAttr, double[][] matrix) {
+		final int cellSize = 16;
+		
+		double[] totalY = new double[matrix.length];
+		String[] cellSeparator = new String[classAttr.numValues()];
+		
+		// Top row with the attribute names
+		String res = "\t\t\t";
+		for(int x = 0; x < matrix.length; x++) {
+			cellSeparator[x] = new String(new char[(cellSize - classAttr.value(x).length() - 1)/8]).replace("\0", "\t");
+			res += classAttr.value(x) + cellSeparator[x];
+			for(int y = 0; y < matrix.length; y++) {
+				totalY[y] += matrix[y][x];
+			}
+		}
+		
+		// Matrix
+		res += "\r\n";
+		for(int y = 0; y < matrix.length; y++) {
+			// Class names at the beginning or row
+			res += "\t" + classAttr.value(y) + cellSeparator[y];
+			
+			double totalX = 0;
+			for(int x = 0; x < matrix[y].length; x++) {
+				res += (int)(matrix[y][x]) + "\t\t";
+				totalX += matrix[y][x];
+			}
+			
+			// Row sum at end of row
+			res += (int)(totalX) + "\r\n";
+		}
+		
+		// Bottom row with column sum
+		res += "\t\t\t";
+		double total = 0;
+		for(int i = 0; i < totalY.length; i++) {
+			res += (int)(totalY[i]) + "\t\t";
+			total += totalY[i];
+		}
+		
+		// Overall total
+		res += (int)(total);
+		
+		return res;
 	}
 	
 	/**
@@ -115,7 +194,6 @@ public class TestClassifiers {
 		ArrayList<Classifier> classifiers = new ArrayList<Classifier>();
 		
 		for(String option : classifierParams) {
-			System.out.println(option);
 			option = option.toLowerCase();
 			String[] values = option.split(" ");
 			
@@ -163,10 +241,7 @@ public class TestClassifiers {
 	private static ArrayList<UpdateableClassifier> parseUpdateableClassifiersFromCommandline(List<String> classifierParams) {
 		ArrayList<UpdateableClassifier> classifiers = new ArrayList<UpdateableClassifier>();
 		
-		System.out.println(classifierParams);
-		
 		for(String option : classifierParams) {
-			System.out.println(option);
 			option = option.toLowerCase();
 			String[] values = option.split(" ");
 			
