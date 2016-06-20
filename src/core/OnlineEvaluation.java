@@ -58,6 +58,8 @@ public class OnlineEvaluation implements Evaluator {
 
 	@Override
 	public List<List<Evaluation>> evaluate(Instances instanceStream, int stepSize) throws Exception {
+		stepSize = Math.max(1, Math.min(stepSize, instanceStream.size()));
+		
 		// Accumulate the training set for the evaluation (needs it for the statistics...)
 		Instances trainingData = new Instances(testSet, 0, 0);
 

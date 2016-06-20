@@ -34,7 +34,7 @@ public class TestClassifiers {
 	
 	public static void main(String[] args) {
 		if(args.length < 1) {
-			System.err.println("Usage: java " + TestClassifiers.class.getName() + " <filename> [-online] [-classifier name params...]*");
+			System.err.println("Usage: java " + TestClassifiers.class.getName() + " <filename> [-online] [-steps s] [-window size overlap] [-classifier name params...]*");
 			System.exit(0);
 		}
 		
@@ -44,6 +44,7 @@ public class TestClassifiers {
 			
 			// Load the data file given via command line
 			String fileName = args[0];
+			String parameters = String.join(" ", args);
 
 			// Load the CSV file containing the data
 			Log.log("Loading data from file '" + fileName + "'...");
@@ -65,7 +66,12 @@ public class TestClassifiers {
 			
 			// Apply sliding window to make use of the time component of the sequential data
 			ActivityWindowifier windowifier = new ActivityWindowifier(data.classAttribute());
-			data = windowifier.windowify(data, 256, 128);
+			if(parameters.contains("-window")) {
+				String[] windowOptions = parameters.split("-window ")[1].split(" ");
+				data = windowifier.windowify(data, Integer.parseInt(windowOptions[0]), Integer.parseInt(windowOptions[1]));
+			} else {
+				data = windowifier.windowify(data, 256, 128);
+			}
 			
 			// Randomize the order of the windows
 			data.randomize(new Random((long)(Math.random() * System.currentTimeMillis())));
@@ -76,29 +82,28 @@ public class TestClassifiers {
 			
 			// Parse the command line arguments:
 			// [-online] [-classifier name params...]*
-			String parameters = String.join(" ", args);
 			boolean online = parameters.contains("-online");
 			List<String> classifierParams = new ArrayList<String>(Arrays.asList(parameters.split("-classifier ")));
 			classifierParams = classifierParams.subList(1, classifierParams.size());
 			
 			// Set up the correct evaluator
 			Evaluator eval = null;
-			String clsNames = "";
+			String clsNames = "[";
 			if(online) {
 				eval = new OnlineEvaluation(testData);
 				for(UpdateableClassifier classifier : TestClassifiers.parseUpdateableClassifiersFromCommandline(classifierParams)) {
 					((OnlineEvaluation)eval).addClassifier(classifier);
-					clsNames += classifier.getClass().getSimpleName() + " ";
+					clsNames += classifier.getClass().getSimpleName() + ", ";
 				}
 			} else {
 				eval = new OfflineEvaluation(testData);
 				for(Classifier classifier : TestClassifiers.parseClassifiersFromCommandline(classifierParams)) {
 					((OfflineEvaluation)eval).addClassifier(classifier);
-					clsNames += classifier.getClass().getSimpleName() + " ";
+					clsNames += classifier.getClass().getSimpleName() + ", ";
 				}
 			}
 			
-			Log.log("Selected classifiers: " + clsNames + "...");
+			Log.log("Selected classifiers: " + clsNames.substring(0, clsNames.length() - 2) + "]");
 			
 			if(parameters.contains("-steps")) {
 				int stepSize = Integer.parseInt(parameters.split("-steps ")[1].split(" ")[0]);
@@ -106,6 +111,8 @@ public class TestClassifiers {
 				Log.log("Evaluation step size: " + stepSize + "...");
 				
 				int currentStep = stepSize;
+				
+				Log.log("Evaluating classifiers...");
 				
 				for(List<Evaluation> evals : eval.evaluate(trainingData, stepSize)) {
 					Log.log("Current training set size: " + currentStep + "\n------------------------\n");
@@ -117,10 +124,12 @@ public class TestClassifiers {
 					currentStep += stepSize;
 				}
 			} else {
+				Log.log("Evaluating classifiers...");
+				
 				int index = 0;
 				for(Evaluation e : eval.evaluateCumulated(trainingData)) {
 					Log.log(eval.getClassifierName(index++) + ":\n" + e.toSummaryString() + "\n"
-								+ printConfusionMatrix(trainingData.classAttribute(), e.confusionMatrix()));
+								+ printConfusionMatrix(trainingData.classAttribute(), e.confusionMatrix()) + "\n");
 				}
 			}
 			
@@ -139,7 +148,7 @@ public class TestClassifiers {
 	 * @return String showing the confusion matrix
 	 */
 	private static String printConfusionMatrix(Attribute classAttr, double[][] matrix) {
-		final int cellSize = 16;
+		final int cellSize = 24;
 		
 		double[] totalY = new double[matrix.length];
 		String[] cellSeparator = new String[classAttr.numValues()];
@@ -150,7 +159,7 @@ public class TestClassifiers {
 			cellSeparator[x] = new String(new char[(cellSize - classAttr.value(x).length() - 1)/8]).replace("\0", "\t");
 			res += classAttr.value(x) + cellSeparator[x];
 			for(int y = 0; y < matrix.length; y++) {
-				totalY[y] += matrix[y][x];
+				totalY[y] += matrix[x][y];
 			}
 		}
 		
@@ -218,9 +227,6 @@ public class TestClassifiers {
 					nb.setUseKernelEstimator(Boolean.parseBoolean(values[1]));
 				classifiers.add(nb);
 				break;
-			case "naivebayesmulti":
-				classifiers.add(new NaiveBayesMultinomial());
-				break;
 			case "j48":
 				J48 tree = new J48();
 				if(values.length >= 2)
@@ -254,12 +260,10 @@ public class TestClassifiers {
 				break;
 			case "naivebayes":
 				NaiveBayesUpdateable nb = new NaiveBayesUpdateable();
-				if(values.length >= 2)
+				if(values.length >= 2) {
 					nb.setUseKernelEstimator(Boolean.parseBoolean(values[1]));
+				}
 				classifiers.add(nb);
-				break;
-			case "naivebayesmulti":
-				classifiers.add(new NaiveBayesMultinomialUpdateable());
 				break;
 			}
 		}

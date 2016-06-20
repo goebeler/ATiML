@@ -45,6 +45,8 @@ public class OfflineEvaluation implements Evaluator {
 
 	@Override
 	public List<List<Evaluation>> evaluate(Instances instanceStream, int stepSize) throws Exception {
+		stepSize = Math.max(1, Math.min(stepSize, instanceStream.size()));
+		
 		List<List<Evaluation>> evals = new ArrayList<List<Evaluation>>();
 		
 		for(int i = stepSize; i <= instanceStream.numInstances(); i++) {
