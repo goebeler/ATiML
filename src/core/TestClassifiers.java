@@ -3,13 +3,12 @@ package core;
 import weka.core.Attribute;
 import weka.core.Instances;
 import weka.core.converters.CSVLoader;
+import weka.core.converters.CSVSaver;
 import weka.filters.Filter;
 import weka.filters.unsupervised.instance.RemoveWithValues;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
 import weka.classifiers.bayes.NaiveBayes;
-import weka.classifiers.bayes.NaiveBayesMultinomial;
-import weka.classifiers.bayes.NaiveBayesMultinomialUpdateable;
 import weka.classifiers.bayes.NaiveBayesUpdateable;
 import weka.classifiers.evaluation.Evaluation;
 import weka.classifiers.lazy.IBk;
@@ -52,25 +51,38 @@ public class TestClassifiers {
 			loader.setSource(new File(fileName));
 			Instances data = loader.getDataSet();
 			
-			// Filter out the 'null' values from the 'gt' class attribute
-			Log.log("Filtering out missing values...");
-			RemoveWithValues rem = new RemoveWithValues();
-			// + 1 since WEKA indices start at 1 when given as string
-			rem.setAttributeIndex(Integer.toString(data.attribute("gt").index() + 1));
-			rem.setNominalIndicesArr(new int[]{data.attribute("gt").indexOfValue("null")});
-			rem.setModifyHeader(true);
-			rem.setInputFormat(data);
-			data = Filter.useFilter(data, rem);
+			if(!parameters.contains("-nofilter")) {
+				// Filter out the 'null' values from the 'gt' class attribute
+				Log.log("Filtering out missing values...");
+				RemoveWithValues rem = new RemoveWithValues();
+				// + 1 since WEKA indices start at 1 when given as string
+				rem.setAttributeIndex(Integer.toString(data.attribute("gt").index() + 1));
+				rem.setNominalIndicesArr(new int[]{data.attribute("gt").indexOfValue("null")});
+				rem.setModifyHeader(true);
+				rem.setInputFormat(data);
+				data = Filter.useFilter(data, rem);
+			}
 			
 			data.setClass(data.attribute("gt"));
 			
 			// Apply sliding window to make use of the time component of the sequential data
 			ActivityWindowifier windowifier = new ActivityWindowifier(data.classAttribute());
-			if(parameters.contains("-window")) {
+			if(parameters.contains("-window ")) {
 				String[] windowOptions = parameters.split("-window ")[1].split(" ");
 				data = windowifier.windowify(data, Integer.parseInt(windowOptions[0]), Integer.parseInt(windowOptions[1]));
-			} else {
+			} else if(!parameters.contains("-nowindow")){
 				data = windowifier.windowify(data, 256, 128);
+			}
+			
+			// If wanted, store the pre-processed data to the file of choice
+			if(parameters.contains("-savedata ")) {
+				System.out.println(parameters.split("-savedata ")[1] + " | " + parameters.split("-savedata ")[1].split(" ")[0]);
+				File saveFile = new File(parameters.split("-savedata ")[1].split(" ")[0]);
+				Log.log("Saving the pre-processed data to '" + saveFile.toString() + "'...");
+				CSVSaver writer = new CSVSaver();
+				writer.setFile(saveFile);
+				writer.setInstances(data);
+				writer.writeBatch();
 			}
 			
 			// Randomize the order of the windows
@@ -217,8 +229,6 @@ public class TestClassifiers {
 				RandomForest rf = new RandomForest();
 				if(values.length >= 2)
 					rf.setMaxDepth(Integer.parseInt(values[1]));
-				if(values.length >= 3)
-					rf.setNumFeatures(Integer.parseInt(values[2]));
 				classifiers.add(rf);
 				break;
 			case "naivebayes":
